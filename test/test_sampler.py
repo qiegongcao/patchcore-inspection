@@ -131,3 +131,23 @@ def test_johnsonlindenstrauss_reduction():
     subsampled_features = model.run(init_features)
 
     assert subsampled_features.shape[-1] == feature_dimension
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="Fails for non-GPU machine.")
+def test_kmeans_coreset_sampling():
+    feature_dimension = 2
+    init_features = _dummy_features(feature_dimension)
+
+    sampling_percentage = 0.1
+    model = sampler.KMeansCoresetSampler(
+        percentage=sampling_percentage,
+        device=torch.device("cpu"),
+        dimension_to_project_features_to=feature_dimension,
+    )
+    subsampled_features = model.run(init_features)
+
+    target_num_subsampled_features = int(len(init_features) * sampling_percentage)
+    assert len(subsampled_features) == target_num_subsampled_features
+    assert (
+        len(torch.unique(subsampled_features, dim=0)) == target_num_subsampled_features
+    )

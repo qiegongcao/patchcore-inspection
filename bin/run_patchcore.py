@@ -326,6 +326,8 @@ def sampler(name, percentage):
             return patchcore.sampler.GreedyCoresetSampler(percentage, device)
         elif name == "approx_greedy_coreset":
             return patchcore.sampler.ApproximateGreedyCoresetSampler(percentage, device)
+        elif name == "kmeans_coreset":
+            return patchcore.sampler.KMeansCoresetSampler(percentage, device)
 
     return ("get_sampler", get_sampler)
 

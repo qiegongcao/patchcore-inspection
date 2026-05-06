@@ -4,6 +4,7 @@ from typing import Union
 import numpy as np
 import torch
 import tqdm
+from sklearn.cluster import KMeans
 
 
 class IdentitySampler:
@@ -189,3 +190,49 @@ class RandomSampler(BaseSampler):
         )
         subset_indices = np.array(subset_indices)
         return features[subset_indices]
+
+
+class KMeansCoresetSampler(GreedyCoresetSampler):
+    def __init__(
+        self,
+        percentage: float,
+        device: torch.device,
+        dimension_to_project_features_to: int = 128,
+        random_state: int = 0,
+        n_init: int = 10,
+    ):
+        """K-means coreset sampling class."""
+        super().__init__(percentage, device, dimension_to_project_features_to)
+        self.random_state = random_state
+        self.n_init = n_init
+
+    def _compute_greedy_coreset_indices(self, features: torch.Tensor) -> np.ndarray:
+        """Selects representative samples with K-means clustering centers."""
+        num_coreset_samples = int(len(features) * self.percentage)
+        if num_coreset_samples <= 0:
+            return np.array([], dtype=int)
+
+        features_np = features.detach().cpu().numpy()
+        kmeans = KMeans(
+            n_clusters=num_coreset_samples,
+            random_state=self.random_state,
+            n_init=self.n_init,
+        )
+        labels = kmeans.fit_predict(features_np)
+        centers = torch.from_numpy(kmeans.cluster_centers_).to(features.device)
+
+        selected_indices = []
+        used_indices = set()
+        for cluster_idx in range(num_coreset_samples):
+            cluster_member_indices = np.where(labels == cluster_idx)[0]
+            cluster_features = features[cluster_member_indices]
+            distances = torch.norm(cluster_features - centers[cluster_idx], dim=1)
+            ordered_indices = torch.argsort(distances).cpu().numpy()
+            for ordered_idx in ordered_indices:
+                candidate = int(cluster_member_indices[ordered_idx])
+                if candidate not in used_indices:
+                    selected_indices.append(candidate)
+                    used_indices.add(candidate)
+                    break
+
+        return np.array(selected_indices, dtype=int)
